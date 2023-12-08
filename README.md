@@ -1,2 +1,2 @@
 # Spotify-Project
- Data analysis of my 3 years data of spotify
+ Data analysis of my 3 years Spotify data

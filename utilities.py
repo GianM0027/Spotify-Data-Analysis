@@ -9,21 +9,21 @@ from datetime import datetime
 
 
 
-def create_extended_df(jsongs):
+def create_extended_df(jData):
     """
-    It creates a dataframe from a list of songs in spotify JSON format
+    It creates a dataframe from a list of data (songs/videos) in spotify JSON format
 
-    :param jsongs: np.darray of songs in JSON format
+    :param jData: np.darray of songs in JSON format
     :return: dataframe with numerical indexes where each row represent a song (with repetitions), each column is
                 an information regarding that song
     """
 
-    extended_df = pd.DataFrame(index=np.arange(len(jsongs)), columns=jsongs[0].keys())
+    extended_df = pd.DataFrame(index=np.arange(len(jData)), columns=jData[0].keys())
 
     # creating initial df
     for column in tqdm(extended_df.columns, desc="From JSON to DataFrame"):
         for index, value in extended_df[column].items():
-            extended_df.at[index, column] = jsongs[index].get(column)
+            extended_df.at[index, column] = jData[index].get(column)
 
     #drop the column if all the rows are equal (no information)
     for column in tqdm(extended_df.columns, desc="Removing columns without relevant information"):
@@ -38,20 +38,6 @@ def create_extended_df(jsongs):
     extended_df.insert(1, "time", times)
 
     return extended_df
-
-
-def create_df_no_duplicates(extended_df):
-
-    df_no_duplicates = extended_df.drop_duplicates(subset="master_metadata_track_name") # removing duplicates from extended dataframe
-
-    df_no_duplicates = df_no_duplicates.set_index(df_no_duplicates.loc[:, "master_metadata_track_name"]) # indexes of the new df are the name of the songs
-
-    df_no_duplicates = df_no_duplicates.drop("master_metadata_track_name", axis=1) # drop the old column with the name of the songs
-
-    # add a column for counting the occurrences and drop the useless columns
-
-    return df_no_duplicates
-
 
 def listening_period(dates):
     """
@@ -74,8 +60,22 @@ def listening_period(dates):
 
     return start_date.strftime("%d/%m/%Y"), end_date.strftime("%d/%m/%Y"), (end_date-start_date).days
 
+def print_most_listened_to(df: pd.DataFrame, most_listened: int = 50):
+    """
+    This function takes a DataFrame with columns 'ms_played', 'master_metadata_track_name', and
+    'master_metadata_album_artist_name' and extracts relevant information. It calculates the total
+    listening time in minutes and identifies the most listened-to songs based on the provided 'most_listened'
+    parameter. The resulting DataFrame is sorted in descending order of listening time.
+    Note: The 'ms_played' column is expected to represent the duration of each song in milliseconds.
 
-def print_most_listened(df, most_listened = 50):
+    :param df: dataframe of songs in JSON format
+    :param most_listened: The number of top songs to display. Defaults to 50.
+
+    :return: A tuple with 2 elements:
+                1) A dataFrame containing information about the most listened-to songs.
+                2) The total listening time in minutes across all songs.
+    """
+
     ms_played = "ms_played"
     track_name = "master_metadata_track_name"
     author = "master_metadata_album_artist_name"
@@ -97,10 +97,23 @@ def print_most_listened(df, most_listened = 50):
     unique_songs_df.rename(columns=column_mapping, inplace=True)
     unique_songs_df.index = range(1,most_listened+1)
 
-    return (unique_songs_df), tot_minutes
+    return unique_songs_df, tot_minutes
 
 
-def plot_months_minutes(df):
+def plot_months_minutes(df: pd.DataFrame):
+    """
+    Plots a bar chart representing the total minutes of music listened for each month over multiple years.
+    This function takes a DataFrame with timestamp and duration information and generates a bar chart using Plotly Express.
+    The chart displays the total minutes of music listened for each month over multiple years. The input DataFrame is expected
+    to have columns 'ts' representing the timestamp and 'ms_played' representing the duration of music played in milliseconds.
+    
+    Note: The timestamp 'ts' is expected to be in the format '%Y-%m-%d'. 
+    The function utilizes Plotly Express for creating interactive plots with html. 
+
+    :param df: The input DataFrame containing columns 'ts' (timestamp) and 'ms_played' (duration in milliseconds).
+    :return: None
+    """
+
     ms_played = "ms_played"
     d = "ts"
     format_str = "%Y-%m-%d"
