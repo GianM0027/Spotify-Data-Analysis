@@ -60,7 +60,7 @@ def listening_period(dates):
 
     return start_date.strftime("%d/%m/%Y"), end_date.strftime("%d/%m/%Y"), (end_date-start_date).days
 
-def print_most_listened_to(df: pd.DataFrame, most_listened: int = 50):
+def print_most_listened_to(df: pd.DataFrame, k: int = 50):
     """
     This function takes a DataFrame with columns 'ms_played', 'master_metadata_track_name', and
     'master_metadata_album_artist_name' and extracts relevant information. It calculates the total
@@ -69,7 +69,7 @@ def print_most_listened_to(df: pd.DataFrame, most_listened: int = 50):
     Note: The 'ms_played' column is expected to represent the duration of each song in milliseconds.
 
     :param df: dataframe of songs in JSON format
-    :param most_listened: The number of top songs to display. Defaults to 50.
+    :param n: The number of top songs to display. Defaults to 50.
 
     :return: A tuple with 2 elements:
                 1) A dataFrame containing information about the most listened-to songs.
@@ -90,12 +90,12 @@ def print_most_listened_to(df: pd.DataFrame, most_listened: int = 50):
     unique_songs_df = grouped_df.drop_duplicates(subset=track_name)
 
     unique_songs_df = unique_songs_df.sort_values(by=ms_played, ascending=False)
-    unique_songs_df = unique_songs_df.iloc[:most_listened, :]
+    unique_songs_df = unique_songs_df.iloc[:k, :]
     unique_songs_df[ms_played] = unique_songs_df[ms_played].apply(lambda x: (x/1000)/60)
 
     column_mapping = {ms_played: "minutes played", track_name: "Song", author: "Author"}
     unique_songs_df.rename(columns=column_mapping, inplace=True)
-    unique_songs_df.index = range(1,most_listened+1)
+    unique_songs_df.index = range(1, k+1)
 
     return unique_songs_df, tot_minutes
 
