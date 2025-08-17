@@ -1,43 +1,109 @@
+import json
+import os
+import shutil
+
 import pandas as pd
 import numpy as np
-
+import zipfile
 import plotly.express as px
-
 from tqdm import tqdm
-
 from datetime import datetime
+from constants import *
 
 
+def get_username_from_data(account_data):
+    identity = account_data.get("Identity", None)
+
+    if isinstance(identity, dict):
+        username = identity.get("displayName", None)
+    else:
+        username = None
+
+    return username
+
+def find_account_and_history_data(data_dir):
+    # if data directory does not exist
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
+        raise FileNotFoundError(
+            f"Data directory was not found and has been created. "
+            f"Please place your .zip files in {data_dir}"
+        )
+
+    # if data directory does exist
+    temp_working_directory = os.path.join(data_dir, "temp")
+    os.makedirs(temp_working_directory, exist_ok=True)
+
+    # extract zip files in a temporary folder
+    for file in os.listdir(data_dir):
+        if file.endswith('.zip'):
+            filename = os.path.join(data_dir, file)
+            with zipfile.ZipFile(filename, 'r') as zip_file:
+                zip_file.extractall(path=temp_working_directory)
+
+    # populate the two dictionaries
+    account_data, history_data = {}, {}
+
+    for folder, target_dict in [
+        (SPOTIFY_ACCOUNT_DATA_FILE_NAME, account_data),
+        (SPOTIFY_STREAMING_FILE_NAME, history_data)
+    ]:
+        folder_path = os.path.join(temp_working_directory, folder)
+        if not os.path.exists(folder_path):
+            continue
+        for file in os.listdir(folder_path):
+            if file.endswith('.json'):
+                file_path = os.path.join(folder_path, file)
+                file_name = file.split('.json')[0]
+                with open(file_path, 'r', encoding='utf-8') as json_file:
+                    target_dict[file_name] = json.load(json_file)
+
+    # delete temporary folder
+    shutil.rmtree(temp_working_directory)
+
+    username = get_username_from_data(account_data)
+    print(f"All good {username}! Your data has been extracted correctly. Here are all the files that Spotify provided:\n")
+
+    print(f"Your account data contains the following entries:\n {list(account_data.keys())}")
+    print(f"\nYour history data contains the following entries:\n {list(history_data.keys())}")
+
+    music_history = {key: data for key, data in history_data.items() if "Audio" in key}
+    video_history = {key: data for key, data in history_data.items() if "Video" in key}
+
+    return account_data, music_history, video_history
 
 def create_extended_df(jData):
     """
-    It creates a dataframe from a list of data (songs/videos) in spotify JSON format
+    Creates a dataframe from a list of data (songs/videos) in Spotify JSON format.
 
-    :param jData: np.darray of songs in JSON format
-    :return: dataframe with numerical indexes where each row represent a song (with repetitions), each column is
-                an information regarding that song
+    Parameters:
+    jData: List or array of songs in JSON format
+
+    Returns:
+    DataFrame with each row representing a song (with repetitions), each column is information about that song
     """
+    # Convert the JSON data to DataFrame directly
+    df = pd.DataFrame(jData)
 
-    extended_df = pd.DataFrame(index=np.arange(len(jData)), columns=jData[0].keys())
+    # Remove columns where all values are the same
+    nunique = df.nunique()
+    cols_to_drop = nunique[nunique == 1].index
+    df = df.drop(columns=cols_to_drop)
 
-    # creating initial df
-    for column in tqdm(extended_df.columns, desc="From JSON to DataFrame"):
-        for index, value in extended_df[column].items():
-            extended_df.at[index, column] = jData[index].get(column)
+    # Extract date and time from timestamp column
+    if 'ts' in df.columns:
+        df['time'] = df['ts'].str[11:-1]  # Extract time part
+        df['ts'] = df['ts'].str[:10]  # Keep only date part
 
-    #drop the column if all the rows are equal (no information)
-    for column in tqdm(extended_df.columns, desc="Removing columns without relevant information"):
-        if extended_df[column].nunique() == 1:
-            extended_df = extended_df.drop(column, axis=1)
+        # Reorder columns to put time right after ts
+        cols = df.columns.tolist()
+        ts_idx = cols.index('ts')
+        cols.remove('time')
+        cols.insert(ts_idx + 1, 'time')
+        df = df[cols]
 
-    #create two columns for date and time
-    times = np.array([])
-    for i in tqdm(range(len(extended_df)), desc="Formatting Dates and Time"):
-        times = np.append(times, extended_df.loc[i, "ts"][11:-1])
-        extended_df.loc[i, "ts"] = extended_df.loc[i, "ts"][:10]
-    extended_df.insert(1, "time", times)
+    return df
 
-    return extended_df
 
 def listening_period(dates):
     """
@@ -58,7 +124,8 @@ def listening_period(dates):
     start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
     end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
 
-    return start_date.strftime("%d/%m/%Y"), end_date.strftime("%d/%m/%Y"), (end_date-start_date).days
+    return start_date.strftime("%d/%m/%Y"), end_date.strftime("%d/%m/%Y"), (end_date - start_date).days
+
 
 def print_most_listened_to(df: pd.DataFrame, k: int = 50):
     """
@@ -82,7 +149,7 @@ def print_most_listened_to(df: pd.DataFrame, k: int = 50):
 
     df = df.loc[:, [ms_played, track_name, author]]
 
-    tot_minutes = round((df.loc[:,ms_played].sum()/1000)/60) #to listened minutes
+    tot_minutes = round((df.loc[:, ms_played].sum() / 1000) / 60)  #to listened minutes
 
     grouped_df = df.groupby([track_name, author])[ms_played].sum().reset_index()
 
@@ -91,11 +158,11 @@ def print_most_listened_to(df: pd.DataFrame, k: int = 50):
 
     unique_songs_df = unique_songs_df.sort_values(by=ms_played, ascending=False)
     unique_songs_df = unique_songs_df.iloc[:k, :]
-    unique_songs_df[ms_played] = unique_songs_df[ms_played].apply(lambda x: (x/1000)/60)
+    unique_songs_df[ms_played] = unique_songs_df[ms_played].apply(lambda x: (x / 1000) / 60)
 
     column_mapping = {ms_played: "minutes played", track_name: "Song", author: "Author"}
     unique_songs_df.rename(columns=column_mapping, inplace=True)
-    unique_songs_df.index = range(1, k+1)
+    unique_songs_df.index = range(1, k + 1)
 
     return unique_songs_df, tot_minutes
 
@@ -103,15 +170,6 @@ def print_most_listened_to(df: pd.DataFrame, k: int = 50):
 def plot_months_minutes(df: pd.DataFrame):
     """
     Plots a bar chart representing the total minutes of music listened for each month over multiple years.
-    This function takes a DataFrame with timestamp and duration information and generates a bar chart using Plotly Express.
-    The chart displays the total minutes of music listened for each month over multiple years. The input DataFrame is expected
-    to have columns 'ts' representing the timestamp and 'ms_played' representing the duration of music played in milliseconds.
-    
-    Note: The timestamp 'ts' is expected to be in the format '%Y-%m-%d'. 
-    The function utilizes Plotly Express for creating interactive plots with html. 
-
-    :param df: The input DataFrame containing columns 'ts' (timestamp) and 'ms_played' (duration in milliseconds).
-    :return: None
     """
 
     ms_played = "ms_played"
@@ -123,7 +181,7 @@ def plot_months_minutes(df: pd.DataFrame):
 
     for index, row in df.iterrows():
         date = datetime.strptime(row[d], format_str)
-        minutes = (row[ms_played]/1000)/60
+        minutes = (row[ms_played] / 1000) / 60
 
         if list_dates_minutes.get(date.year, -1) == -1:
             list_dates_minutes[date.year] = {date.month: minutes}
@@ -136,21 +194,33 @@ def plot_months_minutes(df: pd.DataFrame):
             list_dates_minutes[year] = {key: months[key] for key in sorted(months.keys())}
 
         for months in list_dates_minutes.values():
-            for i in range(1,13):
+            for i in range(1, 13):
                 if months.get(i, -1) == -1:
                     months[i] = 0
 
     df = pd.DataFrame.from_dict(list_dates_minutes, orient="index")
 
-    df_melted = df.reset_index().melt(id_vars='index', var_name='Month', value_name='Minutes').rename(columns={'index': 'Year'})
+    df_melted = df.reset_index().melt(
+        id_vars='index',
+        var_name='Month',
+        value_name='Minutes'
+    ).rename(columns={'index': 'Year'})
+
+    # Ensure Year is treated as categorical → gives a discrete legend
+    df_melted['Year'] = df_melted['Year'].astype(str)
 
     # Create a new column combining year and month
-    df_melted['YearMonth'] = df_melted['Year'].astype(str) + '-' + df_melted['Month'].astype(str)
+    df_melted['YearMonth'] = df_melted['Year'] + '-' + df_melted['Month'].astype(str)
 
-    # Create the histogram using Plotly Express
-    fig = px.bar(df_melted, x='YearMonth', y='Minutes',
-                 labels={'YearMonth': 'Month-Year ', 'Minutes': 'Minutes of Music Listened '},
-                 title='Minutes of Music Listened by Month',
-                 color="Year")
+    # Create the bar chart with discrete legend
+    fig = px.bar(
+        df_melted,
+        x='YearMonth',
+        y='Minutes',
+        labels={'YearMonth': 'Month-Year', 'Minutes': 'Minutes of Music Listened'},
+        title='Minutes of Music Listened by Month',
+        color="Year",   # categorical → discrete legend
+        color_discrete_sequence=px.colors.qualitative.Set2  # optional: nicer colors
+    )
 
     fig.show()

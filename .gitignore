@@ -3,3 +3,4 @@ data_to_analyze/*
 .gitattributes
 .idea
 __pycache__
+todo.py
