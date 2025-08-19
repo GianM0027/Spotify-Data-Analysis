@@ -1,5 +1,3 @@
-import os
-
 # paths definition and data loading
 DATA_DIR = "data_to_analyze"
 SPOTIFY_STREAMING_FILE_NAME = "Spotify Extended Streaming History"

@@ -1,13 +1,13 @@
 import json
 import os
 import shutil
-
 import pandas as pd
 import numpy as np
 import zipfile
 import plotly.express as px
 from tqdm import tqdm
 from datetime import datetime
+import matplotlib.pyplot as plt
 from constants import *
 
 
@@ -72,59 +72,7 @@ def find_account_and_history_data(data_dir):
 
     return account_data, music_history, video_history
 
-def create_extended_df(jData):
-    """
-    Creates a dataframe from a list of data (songs/videos) in Spotify JSON format.
 
-    Parameters:
-    jData: List or array of songs in JSON format
-
-    Returns:
-    DataFrame with each row representing a song (with repetitions), each column is information about that song
-    """
-    # Convert the JSON data to DataFrame directly
-    df = pd.DataFrame(jData)
-
-    # Remove columns where all values are the same
-    nunique = df.nunique()
-    cols_to_drop = nunique[nunique == 1].index
-    df = df.drop(columns=cols_to_drop)
-
-    # Extract date and time from timestamp column
-    if 'ts' in df.columns:
-        df['time'] = df['ts'].str[11:-1]  # Extract time part
-        df['ts'] = df['ts'].str[:10]  # Keep only date part
-
-        # Reorder columns to put time right after ts
-        cols = df.columns.tolist()
-        ts_idx = cols.index('ts')
-        cols.remove('time')
-        cols.insert(ts_idx + 1, 'time')
-        df = df[cols]
-
-    return df
-
-
-def listening_period(dates):
-    """
-    It finds the date of the first and last listened song in the dataframe
-
-    :param dates: list of dates
-    :return: start date, end date, number of days in between
-    """
-    start_date = dates[0]
-    end_date = dates[0]
-
-    for date in dates:
-        if start_date > date:
-            start_date = date
-        if end_date < date:
-            end_date = date
-
-    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-
-    return start_date.strftime("%d/%m/%Y"), end_date.strftime("%d/%m/%Y"), (end_date - start_date).days
 
 
 def print_most_listened_to(df: pd.DataFrame, k: int = 50):
@@ -167,60 +115,32 @@ def print_most_listened_to(df: pd.DataFrame, k: int = 50):
     return unique_songs_df, tot_minutes
 
 
-def plot_months_minutes(df: pd.DataFrame):
-    """
-    Plots a bar chart representing the total minutes of music listened for each month over multiple years.
-    """
 
+
+
+def plot_monthly_minutes(df: pd.DataFrame, year: int):
+    """
+    Plots a bar chart of total minutes of music listened for each month of a specific year.
+    """
     ms_played = "ms_played"
     d = "ts"
     format_str = "%Y-%m-%d"
-    df = df.loc[:, [d, ms_played]]
 
-    list_dates_minutes = {}
+    # Convert timestamps and compute minutes
+    df[d] = pd.to_datetime(df[d], format=format_str)
+    df['minutes'] = df[ms_played] / 1000 / 60
 
-    for index, row in df.iterrows():
-        date = datetime.strptime(row[d], format_str)
-        minutes = (row[ms_played] / 1000) / 60
+    # Filter by year and aggregate by month
+    monthly = df[df[d].dt.year == year].groupby(df[d].dt.month)['minutes'].sum()
+    months = [datetime(1900, m, 1).strftime('%b') for m in range(1, 13)]
+    values = [monthly.get(m, 0) for m in range(1, 13)]
 
-        if list_dates_minutes.get(date.year, -1) == -1:
-            list_dates_minutes[date.year] = {date.month: minutes}
-        elif list_dates_minutes[date.year].get(date.month, -1) == -1:
-            list_dates_minutes[date.year][date.month] = minutes
-        else:
-            list_dates_minutes[date.year][date.month] += minutes
-
-        for year, months in list_dates_minutes.items():
-            list_dates_minutes[year] = {key: months[key] for key in sorted(months.keys())}
-
-        for months in list_dates_minutes.values():
-            for i in range(1, 13):
-                if months.get(i, -1) == -1:
-                    months[i] = 0
-
-    df = pd.DataFrame.from_dict(list_dates_minutes, orient="index")
-
-    df_melted = df.reset_index().melt(
-        id_vars='index',
-        var_name='Month',
-        value_name='Minutes'
-    ).rename(columns={'index': 'Year'})
-
-    # Ensure Year is treated as categorical → gives a discrete legend
-    df_melted['Year'] = df_melted['Year'].astype(str)
-
-    # Create a new column combining year and month
-    df_melted['YearMonth'] = df_melted['Year'] + '-' + df_melted['Month'].astype(str)
-
-    # Create the bar chart with discrete legend
-    fig = px.bar(
-        df_melted,
-        x='YearMonth',
-        y='Minutes',
-        labels={'YearMonth': 'Month-Year', 'Minutes': 'Minutes of Music Listened'},
-        title='Minutes of Music Listened by Month',
-        color="Year",   # categorical → discrete legend
-        color_discrete_sequence=px.colors.qualitative.Set2  # optional: nicer colors
-    )
-
-    fig.show()
+    # Plot
+    plt.figure(figsize=(10,6))
+    plt.bar(months, values, color='coral')
+    plt.xlabel("Month")
+    plt.ylabel("Minutes of Music Listened")
+    plt.title(f"Minutes of Music Listened in {year}")
+    plt.tight_layout()
+    plt.grid(alpha=0.3)
+    plt.show()
