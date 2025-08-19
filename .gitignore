@@ -4,3 +4,6 @@ data_to_analyze/*
 .idea
 __pycache__
 todo.py
+test.ipynb
+.env
+.cache
