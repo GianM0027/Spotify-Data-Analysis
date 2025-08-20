@@ -1,4 +1,5 @@
 data_to_analyze/*.zip
+data_to_analyze/other people's data
 .venv
 .gitattributes
 .idea

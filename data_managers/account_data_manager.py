@@ -3,7 +3,7 @@ from datetime import datetime
 
 class AccountData(dict):
     def __init__(self, account_data=None, **kwargs):
-        if account_data is None:
+        if not account_data:
             account_data = {}
         super().__init__(account_data, **kwargs)
 
@@ -30,35 +30,41 @@ class AccountData(dict):
         return value
 
     def print_account_info(self):
-        username = self.get_voice_from_file(self._identity_file_name, self._username_key)
-        name = self.get_voice_from_file(self._user_data_file_name, self._first_name_key)
-        surname = self.get_voice_from_file(self._user_data_file_name, self._last_name_key)
-        user_reference = f"{name} {surname}" if name and surname else username
+        # if account data was loaded
+        if self._account_data_is_loaded():
+            username = self.get_voice_from_file(self._identity_file_name, self._username_key)
+            name = self.get_voice_from_file(self._user_data_file_name, self._first_name_key)
+            surname = self.get_voice_from_file(self._user_data_file_name, self._last_name_key)
+            user_reference = f"{name} {surname}" if name and surname else username
 
-        account_creation_data = self.get_voice_from_file(self._user_data_file_name, self._account_creation_time_key)
-        account_creation_data = self._string_to_date(account_creation_data)
-        user_birthday = self.get_voice_from_file(self._user_data_file_name, self._birthday_key)
-        user_birthday = self._string_to_date(user_birthday)
-        birthday_greetings = self._check_if_user_birthday(user_birthday)
+            account_creation_data = self.get_voice_from_file(self._user_data_file_name, self._account_creation_time_key)
+            account_creation_data = self._string_to_date(account_creation_data)
+            user_birthday = self.get_voice_from_file(self._user_data_file_name, self._birthday_key)
+            user_birthday = self._string_to_date(user_birthday)
+            birthday_greetings = self._check_if_user_birthday(user_birthday)
 
-        playlist_list = self.get_voice_from_file(self._playlists_file_name, self._playlists_key)
+            playlist_list = self.get_voice_from_file(self._playlists_file_name, self._playlists_key)
 
-        # USER INFO
-        print("#"*50, end="")
-        print(f"\nHello {user_reference}! Here are some info about you and your account")
-        print(f" - You created this account on {account_creation_data.strftime('%d-%m-%Y')}.")
-        print(f" - Your birthday is on {user_birthday.strftime('%d-%m-%Y')}. {birthday_greetings}\n")
+            # USER INFO
+            print("#"*50, end="")
+            print(f"\nHello {user_reference}! Here are some info about you and your account")
+            print(f" - You created this account on {account_creation_data.strftime('%d-%m-%Y')}.")
+            print(f" - Your birthday is on {user_birthday.strftime('%d-%m-%Y')}. {birthday_greetings}\n")
 
-        # PLAYLIST INFO
-        print("#"*50, end="")
-        if len(playlist_list) > 0:
-            print("\nIt looks like you created some playlists:")
+            # PLAYLIST INFO
+            print("#"*50, end="")
+            if len(playlist_list) > 0:
+                print("\nIt looks like you created some playlists:")
 
-            for playlist in playlist_list:
-                description = "\t-\t "+ playlist['description'] if playlist['description'] else ""
-                print(f"- {playlist['name']} {description}")
+                for playlist in playlist_list:
+                    description = "\t-\t "+ playlist['description'] if playlist['description'] else ""
+                    print(f"- {playlist['name']} {description}")
+            else:
+                print("\nIt looks like you did not create any playlists. Very bad :(")
+
+
         else:
-            print("\nIt looks like you did not create any playlists. Very bad :(")
+            print("\nIt looks like you did not load any account data :(")
 
 
     def _string_to_date(self, string_date):
@@ -71,3 +77,9 @@ class AccountData(dict):
             return greetings
 
         return ""
+
+    def _account_data_is_loaded(self):
+        if self:
+            return True
+
+        return False
